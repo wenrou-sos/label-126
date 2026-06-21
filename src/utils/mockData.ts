@@ -173,7 +173,7 @@ export function generateProductionData() {
   return {
     targetCount: 1200,
     completedCount: totalPassed + randomInt(100, 300),
-    passRate: Math.round((totalPassed / total) * 100) / 100,
+    passRate: Math.round((totalPassed / total) * 100),
     categories,
   };
 }

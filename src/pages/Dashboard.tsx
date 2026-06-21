@@ -64,10 +64,10 @@ const Dashboard: React.FC = () => {
   };
 
   const handleClickAlarm = (alarm: any) => {
-    openAlarmModal(alarm);
     if (!alarm.acknowledged) {
       acknowledgeAlarm(alarm.id);
     }
+    openAlarmModal(alarm.id);
   };
 
   if (loading && !data) {

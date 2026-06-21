@@ -17,7 +17,7 @@ interface DashboardState {
   acknowledgeAllAlarms: () => void;
   toggleSound: () => void;
   setRefreshInterval: (interval: number) => void;
-  openAlarmModal: (alarm: Alarm) => void;
+  openAlarmModal: (alarmId: string) => void;
   closeAlarmModal: () => void;
   clearNewAlarmFlag: () => void;
 }
@@ -60,12 +60,19 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   acknowledgeAlarm: (id: string) => {
-    const { data } = get();
+    const { data, selectedAlarm } = get();
     if (!data) return;
     const updatedAlarms = data.alarms.map((a) =>
       a.id === id ? { ...a, acknowledged: true } : a
     );
-    set({ data: { ...data, alarms: updatedAlarms } });
+    const updatedSelectedAlarm =
+      selectedAlarm && selectedAlarm.id === id
+        ? { ...selectedAlarm, acknowledged: true }
+        : selectedAlarm;
+    set({
+      data: { ...data, alarms: updatedAlarms },
+      selectedAlarm: updatedSelectedAlarm,
+    });
   },
 
   acknowledgeAllAlarms: () => {
@@ -83,8 +90,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({ refreshInterval: interval });
   },
 
-  openAlarmModal: (alarm: Alarm) => {
-    set({ selectedAlarm: alarm, showAlarmModal: true });
+  openAlarmModal: (alarmId: string) => {
+    const { data } = get();
+    if (!data) return;
+    const alarm = data.alarms.find((a) => a.id === alarmId);
+    if (alarm) {
+      set({ selectedAlarm: alarm, showAlarmModal: true });
+    }
   },
 
   closeAlarmModal: () => {
