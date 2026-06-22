@@ -170,16 +170,25 @@ export const EquipmentCard: React.FC<EquipmentCardProps> = ({ data, onClick, onM
             <Activity size={13} className={maint.color} />
             <span className="text-xs text-slate-400">保养寿命</span>
           </div>
-          <span className={`text-xs font-semibold ${maint.color}`}>
-            {mStatus.status === 'overdue'
-              ? `超期 ${Math.abs(mStatus.remainingHours)}h`
-              : `剩余 ${Math.max(0, Math.round(mStatus.remainingHours))}h`}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`text-lg font-bold font-mono-num ${maint.color} ${
+              mStatus.status !== 'normal' ? 'animate-pulse-slow' : ''
+            }`}>
+              {mStatus.status === 'overdue'
+                ? `-${Math.abs(Math.round(mStatus.remainingPercent))}%`
+                : `${Math.round(mStatus.remainingPercent)}%`}
+            </span>
+            <span className={`text-xs font-semibold ${maint.color}`}>
+              {mStatus.status === 'overdue'
+                ? `超期 ${Math.abs(mStatus.remainingHours)}h`
+                : `剩 ${Math.max(0, Math.round(mStatus.remainingHours))}h`}
+            </span>
+          </div>
         </div>
 
-        <div className={`h-1.5 rounded-full ${maint.trackBg} overflow-hidden mb-2`}>
+        <div className={`h-2 rounded-full ${maint.trackBg} overflow-hidden mb-2`}>
           <div
-            className={`h-full rounded-full transition-all duration-500 ${
+            className={`h-full rounded-full transition-all duration-500 relative ${
               mStatus.status === 'normal'
                 ? 'bg-gradient-to-r from-green-500 to-green-400'
                 : mStatus.status === 'warning'
@@ -187,9 +196,13 @@ export const EquipmentCard: React.FC<EquipmentCardProps> = ({ data, onClick, onM
                 : 'bg-gradient-to-r from-red-500 to-red-400'
             } ${mStatus.status === 'overdue' ? 'animate-pulse' : ''}`}
             style={{
-              width: `${Math.max(2, mStatus.remainingPercent)}%`,
+              width: `${Math.max(3, Math.max(0, mStatus.remainingPercent))}%`,
             }}
-          />
+          >
+            {mStatus.status === 'overdue' && (
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-red-300/30 to-transparent animate-progress-shine" />
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between text-xs text-slate-500">

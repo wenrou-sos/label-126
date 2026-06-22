@@ -25,6 +25,8 @@ interface DashboardState {
   showEquipmentModal: boolean;
   showMaintenanceForm: boolean;
   maintenanceFormEquipment: Equipment | null;
+  localMaintenanceRecords: MaintenanceRecord[];
+  localEquipmentUpdates: Record<string, { lastMaintenanceDate: string; lastMaintenanceHours: number }>;
   fetchData: () => Promise<void>;
   updateData: () => void;
   acknowledgeAlarm: (id: string) => void;
@@ -54,12 +56,63 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   showEquipmentModal: false,
   showMaintenanceForm: false,
   maintenanceFormEquipment: null,
+  localMaintenanceRecords: [],
+  localEquipmentUpdates: {},
 
   fetchData: async () => {
     try {
       set({ loading: true, error: null });
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const data = generateDashboardData();
+      const freshData = generateDashboardData();
+      const { localMaintenanceRecords, localEquipmentUpdates } = get();
+
+      const mergedRecords = [
+        ...localMaintenanceRecords,
+        ...freshData.maintenanceRecords.filter(
+          (r) => !localMaintenanceRecords.some((lr) => lr.id === r.id)
+        ),
+      ].sort(
+        (a, b) => new Date(b.maintenanceDate).getTime() - new Date(a.maintenanceDate).getTime()
+      );
+
+      const mergedEquipments = freshData.equipments.map((eq) => {
+        const localUpdate = localEquipmentUpdates[eq.id];
+        if (localUpdate) {
+          return {
+            ...eq,
+            lastMaintenanceDate: localUpdate.lastMaintenanceDate,
+            lastMaintenanceHours: localUpdate.lastMaintenanceHours,
+          };
+        }
+        return eq;
+      });
+
+      const updatedEquipmentNames = Object.keys(localEquipmentUpdates)
+        .map((eqId) => {
+          const eq = freshData.equipments.find((e) => e.id === eqId);
+          return eq?.name;
+        })
+        .filter(Boolean) as string[];
+
+      const mergedAlarms = freshData.alarms.map((alarm) => {
+        if (alarm.type === 'maintenance') {
+          const nameMatch = updatedEquipmentNames.some((name) =>
+            alarm.location.includes(name) || alarm.message.includes(name)
+          );
+          if (nameMatch) {
+            return { ...alarm, acknowledged: true };
+          }
+        }
+        return alarm;
+      });
+
+      const data: DashboardData = {
+        ...freshData,
+        equipments: mergedEquipments,
+        maintenanceRecords: mergedRecords,
+        alarms: mergedAlarms,
+      };
+
       set({ data, loading: false });
     } catch (err) {
       set({ error: '数据加载失败', loading: false });
@@ -162,7 +215,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   addMaintenanceRecord: (form: NewMaintenanceForm) => {
-    const { data } = get();
+    const { data, localMaintenanceRecords, localEquipmentUpdates } = get();
     if (!data) return;
 
     const equipment = data.equipments.find((e) => e.id === form.equipmentId);
@@ -195,12 +248,32 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       };
     });
 
+    const updatedAlarms = data.alarms.map((a) => {
+      if (a.type === 'maintenance' && !a.acknowledged) {
+        if (a.location.includes(equipment.name) || a.message.includes(equipment.name)) {
+          return { ...a, acknowledged: true };
+        }
+      }
+      return a;
+    });
+
+    const newLocalEquipmentUpdates = {
+      ...localEquipmentUpdates,
+      [form.equipmentId]: {
+        lastMaintenanceDate: now.toISOString(),
+        lastMaintenanceHours: equipment.totalRunningHours,
+      },
+    };
+
     set({
       data: {
         ...data,
         equipments: updatedEquipments,
+        alarms: updatedAlarms,
         maintenanceRecords: [newRecord, ...data.maintenanceRecords],
       },
+      localMaintenanceRecords: [newRecord, ...localMaintenanceRecords],
+      localEquipmentUpdates: newLocalEquipmentUpdates,
       showMaintenanceForm: false,
       maintenanceFormEquipment: null,
     });
