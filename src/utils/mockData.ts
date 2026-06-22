@@ -389,10 +389,18 @@ export function generateBatchTrackInfo(
       endTime = new Date(stepEndTime).toISOString();
       startTime = new Date(stepEndTime - duration * 60 * 1000).toISOString();
     } else if (idx === currentIndex) {
-      status = 'in_progress';
-      const startOffset = randomInt(10, durationRange.max - 5);
-      startTime = new Date(now - startOffset * 60 * 1000).toISOString();
-      durationMinutes = startOffset;
+      if (currentProcess === 'completed') {
+        status = 'completed';
+        durationMinutes = duration;
+        const stepEndTime = now - randomInt(5, 30) * 60 * 1000;
+        endTime = new Date(stepEndTime).toISOString();
+        startTime = new Date(stepEndTime - duration * 60 * 1000).toISOString();
+      } else {
+        status = 'in_progress';
+        const startOffset = randomInt(10, durationRange.max - 5);
+        startTime = new Date(now - startOffset * 60 * 1000).toISOString();
+        durationMinutes = startOffset;
+      }
     }
 
     let operator: string | undefined;
@@ -442,19 +450,20 @@ export function generateBatchTrackInfo(
   const completedSteps = processSteps.filter(
     (s) => s.status === 'completed' && s.durationMinutes
   );
-  const totalDuration = completedSteps.reduce(
+  let totalDuration = completedSteps.reduce(
     (sum, s) => sum + (s.durationMinutes || 0),
     0
   );
 
   const currentStep = processSteps.find((s) => s.status === 'in_progress');
   if (currentStep?.durationMinutes) {
-    totalDuration + currentStep.durationMinutes;
+    totalDuration += currentStep.durationMinutes;
   }
 
   let slowestStep: BatchTrackInfo['slowestStep'] | undefined;
-  if (completedSteps.length > 0) {
-    const slowest = completedSteps.reduce((prev, curr) =>
+  const stepsWithDuration = processSteps.filter((s) => s.durationMinutes && s.status !== 'pending');
+  if (stepsWithDuration.length > 0) {
+    const slowest = stepsWithDuration.reduce((prev, curr) =>
       (curr.durationMinutes || 0) > (prev.durationMinutes || 0) ? curr : prev
     );
     slowestStep = {
@@ -656,7 +665,88 @@ export function updateDashboardData(prev: DashboardData): DashboardData {
       const currentIdx = processOrder.indexOf(batch.currentProcess);
       if (currentIdx < processOrder.length - 1) {
         const nextProcess = processOrder[currentIdx + 1];
-        return generateBatchTrackInfo(batch.batchId, batch.category, nextProcess);
+        const now = Date.now();
+        const updatedSteps = batch.processSteps.map((step) => {
+          if (step.processType === batch.currentProcess && step.status === 'in_progress') {
+            const duration = step.durationMinutes || randomInt(10, 60);
+            return {
+              ...step,
+              status: 'completed' as const,
+              durationMinutes: duration,
+              endTime: new Date(now - randomInt(1, 5) * 60 * 1000).toISOString(),
+            };
+          }
+          if (step.processType === nextProcess && step.status === 'pending') {
+            const processStepDurations: Record<ProcessType, { min: number; max: number }> = {
+              receiving: { min: 10, max: 30 },
+              pretreatment: { min: 20, max: 90 },
+              washing: { min: 40, max: 80 },
+              finishing: { min: 30, max: 100 },
+              inspection: { min: 15, max: 50 },
+              completed: { min: 5, max: 20 },
+            };
+            const durationRange = processStepDurations[nextProcess];
+            const startOffset = randomInt(5, Math.max(6, durationRange.min));
+            const operator = randomChoice(operatorNames);
+            let workstation: string | undefined;
+            let equipment: string | undefined;
+            if (nextProcess === 'receiving') {
+              workstation = randomChoice(['分拣工位1', '分拣工位2']);
+            } else if (nextProcess === 'pretreatment') {
+              workstation = randomChoice(['去渍工位1', '去渍工位2']);
+            } else if (nextProcess === 'washing') {
+              equipment = randomChoice(['干洗机1号', '干洗机2号', '干洗机3号', '水洗机1号', '水洗机2号']);
+            } else if (nextProcess === 'finishing') {
+              workstation = randomChoice(['熨烫工位1', '熨烫工位2']);
+              equipment = randomChoice(['烘干机1号', '烘干机2号']);
+            } else if (nextProcess === 'inspection') {
+              workstation = randomChoice(['质检工位1', '质检工位2']);
+            }
+            return {
+              ...step,
+              status: (nextProcess === 'completed' ? 'completed' : 'in_progress') as ProcessStepRecord['status'],
+              startTime: new Date(now - startOffset * 60 * 1000).toISOString(),
+              durationMinutes: nextProcess === 'completed' ? randomInt(durationRange.min, durationRange.max) : startOffset,
+              endTime: nextProcess === 'completed' ? new Date(now).toISOString() : undefined,
+              operator,
+              workstation,
+              equipment,
+            };
+          }
+          return step;
+        });
+
+        const completedSteps = updatedSteps.filter((s) => s.status === 'completed' && s.durationMinutes);
+        let totalDuration = completedSteps.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
+        const currentStep = updatedSteps.find((s) => s.status === 'in_progress');
+        if (currentStep?.durationMinutes) {
+          totalDuration += currentStep.durationMinutes;
+        }
+
+        const stepsWithDuration = updatedSteps.filter((s) => s.durationMinutes && s.status !== 'pending');
+        let slowestStep: BatchTrackInfo['slowestStep'] | undefined;
+        if (stepsWithDuration.length > 0) {
+          const slowest = stepsWithDuration.reduce((prev, curr) =>
+            (curr.durationMinutes || 0) > (prev.durationMinutes || 0) ? curr : prev
+          );
+          slowestStep = {
+            processType: slowest.processType,
+            processName: slowest.processName,
+            durationMinutes: slowest.durationMinutes || 0,
+          };
+        }
+
+        return {
+          ...batch,
+          currentProcess: nextProcess,
+          processSteps: updatedSteps,
+          totalDurationMinutes: totalDuration || undefined,
+          slowestStep,
+          expectedCompletionTime:
+            processOrder.indexOf(nextProcess) < processOrder.length - 1
+              ? new Date(now + randomInt(30, 180) * 60 * 1000).toISOString()
+              : undefined,
+        };
       }
     }
     return batch;

@@ -88,8 +88,12 @@ export const BatchTrackModal: React.FC<BatchTrackModalProps> = ({ open, onClose 
   const handleSearch = (value: string) => {
     setSearchText(value);
     if (value && data) {
+      const keyword = value.toLowerCase().trim();
       const batch = data.batches.find(
-        (b) => b.batchId === value || b.batchName.toLowerCase() === value.toLowerCase()
+        (b) =>
+          b.batchId.toLowerCase().includes(keyword) ||
+          b.batchName.toLowerCase().includes(keyword) ||
+          b.category.toLowerCase().includes(keyword)
       );
       if (batch) {
         selectBatch(batch.batchId);
@@ -130,7 +134,7 @@ export const BatchTrackModal: React.FC<BatchTrackModalProps> = ({ open, onClose 
         <div className="px-6 py-4 border-b border-slate-700/50">
           <div className="relative">
             <SearchInput
-              placeholder="输入批次号，如 W2024056 或 羊毛大衣"
+              placeholder="输入批次号或品类，如 2024001 或 羊毛大衣"
               allowClear
               size="large"
               value={searchText}
