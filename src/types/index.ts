@@ -22,6 +22,12 @@ export interface Workstation {
 export type EquipmentStatus = 'running' | 'standby' | 'fault';
 export type EquipmentType = 'dryer' | 'washer' | 'drying_rack' | 'ironing';
 
+export interface MaintenanceCycle {
+  equipmentType: EquipmentType;
+  maintenanceIntervalHours: number;
+  warningThresholdPercent: number;
+}
+
 export interface Equipment {
   id: string;
   name: string;
@@ -32,9 +38,32 @@ export interface Equipment {
   progress: number;
   remainingMinutes?: number;
   faultMessage?: string;
+  totalRunningHours: number;
+  lastMaintenanceDate: string;
+  lastMaintenanceHours: number;
+  maintenanceCycleHours: number;
 }
 
-export type AlarmType = 'timeout' | 'equipment_fault';
+export type MaintenanceStatus = 'normal' | 'warning' | 'overdue';
+
+export type MaintenanceType = 'routine' | 'repair' | 'inspection' | 'emergency';
+
+export interface MaintenanceRecord {
+  id: string;
+  equipmentId: string;
+  equipmentName: string;
+  maintenanceType: MaintenanceType;
+  operator: string;
+  maintenanceDate: string;
+  durationMinutes: number;
+  description: string;
+  partsReplaced?: string[];
+  nextMaintenanceDate?: string;
+  notes?: string;
+}
+
+export type AlarmType = 'timeout' | 'equipment_fault' | 'maintenance';
+
 export type AlarmLevel = 'warning' | 'danger';
 
 export interface Alarm {
@@ -69,5 +98,6 @@ export interface DashboardData {
   equipments: Equipment[];
   alarms: Alarm[];
   production: ProductionData;
+  maintenanceRecords: MaintenanceRecord[];
   lastUpdate: string;
 }

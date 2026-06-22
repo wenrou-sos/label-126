@@ -1,6 +1,16 @@
 import { create } from 'zustand';
-import type { DashboardData, Alarm } from '@/types';
-import { generateDashboardData, updateDashboardData } from '@/utils/mockData';
+import type { DashboardData, Alarm, Equipment, MaintenanceRecord, MaintenanceType } from '@/types';
+import { generateDashboardData, updateDashboardData, getMaintenanceCycle } from '@/utils/mockData';
+
+interface NewMaintenanceForm {
+  equipmentId: string;
+  maintenanceType: MaintenanceType;
+  operator: string;
+  durationMinutes: number;
+  description: string;
+  partsReplaced: string[];
+  notes?: string;
+}
 
 interface DashboardState {
   data: DashboardData | null;
@@ -11,6 +21,10 @@ interface DashboardState {
   selectedAlarm: Alarm | null;
   showAlarmModal: boolean;
   lastNewAlarmId: string | null;
+  selectedEquipment: Equipment | null;
+  showEquipmentModal: boolean;
+  showMaintenanceForm: boolean;
+  maintenanceFormEquipment: Equipment | null;
   fetchData: () => Promise<void>;
   updateData: () => void;
   acknowledgeAlarm: (id: string) => void;
@@ -20,6 +34,11 @@ interface DashboardState {
   openAlarmModal: (alarmId: string) => void;
   closeAlarmModal: () => void;
   clearNewAlarmFlag: () => void;
+  openEquipmentModal: (equipmentId: string) => void;
+  closeEquipmentModal: () => void;
+  openMaintenanceForm: (equipmentId?: string) => void;
+  closeMaintenanceForm: () => void;
+  addMaintenanceRecord: (form: NewMaintenanceForm) => void;
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
@@ -31,6 +50,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   selectedAlarm: null,
   showAlarmModal: false,
   lastNewAlarmId: null,
+  selectedEquipment: null,
+  showEquipmentModal: false,
+  showMaintenanceForm: false,
+  maintenanceFormEquipment: null,
 
   fetchData: async () => {
     try {
@@ -44,7 +67,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   updateData: () => {
-    const { data } = get();
+    const { data, selectedEquipment } = get();
     if (!data) return;
 
     const prevAlarmIds = new Set(data.alarms.filter((a) => !a.acknowledged).map((a) => a.id));
@@ -56,7 +79,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       set({ lastNewAlarmId: newAlarms[0].id });
     }
 
-    set({ data: newData });
+    const updatedSelectedEquipment = selectedEquipment
+      ? newData.equipments.find((e) => e.id === selectedEquipment.id) || null
+      : null;
+
+    set({ data: newData, selectedEquipment: updatedSelectedEquipment });
   },
 
   acknowledgeAlarm: (id: string) => {
@@ -105,5 +132,77 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   clearNewAlarmFlag: () => {
     set({ lastNewAlarmId: null });
+  },
+
+  openEquipmentModal: (equipmentId: string) => {
+    const { data } = get();
+    if (!data) return;
+    const equipment = data.equipments.find((e) => e.id === equipmentId);
+    if (equipment) {
+      set({ selectedEquipment: equipment, showEquipmentModal: true });
+    }
+  },
+
+  closeEquipmentModal: () => {
+    set({ showEquipmentModal: false, selectedEquipment: null });
+  },
+
+  openMaintenanceForm: (equipmentId?: string) => {
+    const { data } = get();
+    if (!data) return;
+    let equipment: Equipment | null = null;
+    if (equipmentId) {
+      equipment = data.equipments.find((e) => e.id === equipmentId) || null;
+    }
+    set({ showMaintenanceForm: true, maintenanceFormEquipment: equipment });
+  },
+
+  closeMaintenanceForm: () => {
+    set({ showMaintenanceForm: false, maintenanceFormEquipment: null });
+  },
+
+  addMaintenanceRecord: (form: NewMaintenanceForm) => {
+    const { data } = get();
+    if (!data) return;
+
+    const equipment = data.equipments.find((e) => e.id === form.equipmentId);
+    if (!equipment) return;
+
+    const now = new Date();
+    const newRecord: MaintenanceRecord = {
+      id: `maint-new-${Date.now()}`,
+      equipmentId: form.equipmentId,
+      equipmentName: equipment.name,
+      maintenanceType: form.maintenanceType,
+      operator: form.operator,
+      maintenanceDate: now.toISOString(),
+      durationMinutes: form.durationMinutes,
+      description: form.description,
+      partsReplaced: form.partsReplaced.length > 0 ? form.partsReplaced : undefined,
+      nextMaintenanceDate:
+        form.maintenanceType === 'routine' || form.maintenanceType === 'inspection'
+          ? new Date(now.getTime() + getMaintenanceCycle(equipment.type) * 60 * 60 * 1000).toISOString()
+          : undefined,
+      notes: form.notes,
+    };
+
+    const updatedEquipments = data.equipments.map((e) => {
+      if (e.id !== form.equipmentId) return e;
+      return {
+        ...e,
+        lastMaintenanceDate: now.toISOString(),
+        lastMaintenanceHours: e.totalRunningHours,
+      };
+    });
+
+    set({
+      data: {
+        ...data,
+        equipments: updatedEquipments,
+        maintenanceRecords: [newRecord, ...data.maintenanceRecords],
+      },
+      showMaintenanceForm: false,
+      maintenanceFormEquipment: null,
+    });
   },
 }));

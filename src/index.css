@@ -145,6 +145,7 @@ body {
   border-radius: 12px !important;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
   padding: 0 !important;
+  overflow: hidden;
 }
 
 .ant-modal-mask {

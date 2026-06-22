@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Spin, Alert } from 'antd';
-import { Users, Cpu, Layers } from 'lucide-react';
+import { Users, Cpu, Layers, Wrench } from 'lucide-react';
 import { useDashboardStore } from '@/store/dashboardStore';
 import { useInterval } from '@/hooks/useInterval';
 import { useAlarmSound } from '@/hooks/useAlarmSound';
@@ -11,6 +11,8 @@ import { EquipmentCard } from '@/components/EquipmentCard';
 import { AlarmPanel } from '@/components/AlarmPanel';
 import { AlarmModal } from '@/components/AlarmModal';
 import { ProductionStats } from '@/components/ProductionStats';
+import { EquipmentDetailModal } from '@/components/EquipmentDetailModal';
+import { MaintenanceForm } from '@/components/MaintenanceForm';
 
 const Dashboard: React.FC = () => {
   const {
@@ -22,6 +24,9 @@ const Dashboard: React.FC = () => {
     showAlarmModal,
     selectedAlarm,
     lastNewAlarmId,
+    showEquipmentModal,
+    showMaintenanceForm,
+    maintenanceFormEquipment,
     fetchData,
     updateData,
     acknowledgeAlarm,
@@ -30,10 +35,15 @@ const Dashboard: React.FC = () => {
     setRefreshInterval,
     openAlarmModal,
     closeAlarmModal,
+    openEquipmentModal,
+    closeEquipmentModal,
+    openMaintenanceForm,
+    closeMaintenanceForm,
     clearNewAlarmFlag,
   } = useDashboardStore();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [maintenanceFormPreselectId, setMaintenanceFormPreselectId] = useState<string | undefined>(undefined);
   const { playAlarm } = useAlarmSound(soundEnabled);
 
   useEffect(() => {
@@ -68,6 +78,23 @@ const Dashboard: React.FC = () => {
       acknowledgeAlarm(alarm.id);
     }
     openAlarmModal(alarm.id);
+  };
+
+  const handleEquipmentClick = (equipmentId: string) => {
+    openEquipmentModal(equipmentId);
+  };
+
+  const handleRegisterMaintenance = (equipmentId: string) => {
+    setMaintenanceFormPreselectId(equipmentId);
+    closeEquipmentModal();
+    setTimeout(() => {
+      openMaintenanceForm(equipmentId);
+    }, 100);
+  };
+
+  const handleMaintenanceFormClose = () => {
+    setMaintenanceFormPreselectId(undefined);
+    closeMaintenanceForm();
   };
 
   if (loading && !data) {
@@ -119,9 +146,18 @@ const Dashboard: React.FC = () => {
       <main className="flex-1 p-6 overflow-auto">
         <div className="max-w-[1600px] mx-auto space-y-6">
           <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Layers size={18} className="text-cyan-400" />
-              <h2 className="text-base font-semibold text-slate-200">工序处理量</h2>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Layers size={18} className="text-cyan-400" />
+                <h2 className="text-base font-semibold text-slate-200">工序处理量</h2>
+              </div>
+              <button
+                onClick={() => openMaintenanceForm()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-300 hover:bg-purple-600/30 hover:text-purple-200 transition-all text-xs font-medium"
+              >
+                <Wrench size={14} />
+                登记维保
+              </button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               {data.processes.map((process, index) => (
@@ -172,7 +208,12 @@ const Dashboard: React.FC = () => {
                 <div className="card-dark rounded-xl p-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {data.equipments.map((eq) => (
-                      <EquipmentCard key={eq.id} data={eq} />
+                      <EquipmentCard
+                        key={eq.id}
+                        data={eq}
+                        onClick={() => handleEquipmentClick(eq.id)}
+                        onMaintenanceClick={() => handleRegisterMaintenance(eq.id)}
+                      />
                     ))}
                   </div>
                 </div>
@@ -201,6 +242,18 @@ const Dashboard: React.FC = () => {
         alarm={selectedAlarm}
         onClose={closeAlarmModal}
         onAcknowledge={acknowledgeAlarm}
+      />
+
+      <EquipmentDetailModal
+        open={showEquipmentModal}
+        onClose={closeEquipmentModal}
+        onRegisterMaintenance={handleRegisterMaintenance}
+      />
+
+      <MaintenanceForm
+        open={showMaintenanceForm}
+        defaultEquipmentId={maintenanceFormPreselectId || maintenanceFormEquipment?.id}
+        onClose={handleMaintenanceFormClose}
       />
 
       {isRefreshing && (
