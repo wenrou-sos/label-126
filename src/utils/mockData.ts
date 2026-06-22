@@ -1,4 +1,4 @@
-import type { DashboardData, ProcessData, Workstation, Equipment, Alarm, CategoryPassRate, MaintenanceRecord, EquipmentType } from '@/types';
+import type { DashboardData, ProcessData, Workstation, Equipment, Alarm, CategoryPassRate, MaintenanceRecord, EquipmentType, BatchTrackInfo, ProcessStepRecord, ProcessType } from '@/types';
 
 const processNames: { id: string; name: string }[] = [
   { id: 'receiving', name: '收衣待分拣' },
@@ -335,6 +335,176 @@ export function generateMaintenanceRecords(equipments: Equipment[]): Maintenance
   );
 }
 
+const batchCategoryPrefixes: Record<string, string> = {
+  '羊毛大衣': 'W',
+  '真丝衬衫': 'S',
+  '西装套装': 'SU',
+  '羽绒服': 'D',
+  '羊绒衫': 'CA',
+  '风衣': 'T',
+  '牛仔裤': 'J',
+  '连衣裙': 'DR',
+};
+
+export function generateBatchTrackInfo(
+  batchId: string,
+  category: string,
+  currentProcess: ProcessType
+): BatchTrackInfo {
+  const processOrder: ProcessType[] = [
+    'receiving',
+    'pretreatment',
+    'washing',
+    'finishing',
+    'inspection',
+    'completed',
+  ];
+  const currentIndex = processOrder.indexOf(currentProcess);
+  const now = Date.now();
+  const totalItems = randomInt(8, 30);
+
+  const processStepDurations: Record<ProcessType, { min: number; max: number }> = {
+    receiving: { min: 10, max: 30 },
+    pretreatment: { min: 20, max: 90 },
+    washing: { min: 40, max: 80 },
+    finishing: { min: 30, max: 100 },
+    inspection: { min: 15, max: 50 },
+    completed: { min: 5, max: 20 },
+  };
+
+  const processSteps: ProcessStepRecord[] = processOrder.map((pType, idx) => {
+    const pInfo = processNames.find((pn) => pn.id === pType)!;
+    const durationRange = processStepDurations[pType];
+    const duration = randomInt(durationRange.min, durationRange.max);
+
+    let status: ProcessStepRecord['status'] = 'pending';
+    let startTime: string | undefined;
+    let endTime: string | undefined;
+    let durationMinutes: number | undefined;
+
+    if (idx < currentIndex) {
+      status = 'completed';
+      durationMinutes = duration;
+      const stepEndTime = now - (currentIndex - idx) * randomInt(30, 90) * 60 * 1000;
+      endTime = new Date(stepEndTime).toISOString();
+      startTime = new Date(stepEndTime - duration * 60 * 1000).toISOString();
+    } else if (idx === currentIndex) {
+      status = 'in_progress';
+      const startOffset = randomInt(10, durationRange.max - 5);
+      startTime = new Date(now - startOffset * 60 * 1000).toISOString();
+      durationMinutes = startOffset;
+    }
+
+    let operator: string | undefined;
+    let workstation: string | undefined;
+    let equipment: string | undefined;
+
+    if (status !== 'pending') {
+      operator = randomChoice(operatorNames);
+      if (pType === 'receiving') {
+        workstation = randomChoice(['分拣工位1', '分拣工位2']);
+      } else if (pType === 'pretreatment') {
+        workstation = randomChoice(['去渍工位1', '去渍工位2']);
+      } else if (pType === 'washing') {
+        equipment = randomChoice([
+          '干洗机1号',
+          '干洗机2号',
+          '干洗机3号',
+          '水洗机1号',
+          '水洗机2号',
+        ]);
+      } else if (pType === 'finishing') {
+        workstation = randomChoice(['熨烫工位1', '熨烫工位2']);
+        equipment = randomChoice(['烘干机1号', '烘干机2号']);
+      } else if (pType === 'inspection') {
+        workstation = randomChoice(['质检工位1', '质检工位2']);
+      }
+    }
+
+    return {
+      processType: pType,
+      processName: pInfo.name,
+      status,
+      operator,
+      workstation,
+      equipment,
+      startTime,
+      endTime,
+      durationMinutes,
+      itemCount: status === 'completed' ? totalItems : undefined,
+      notes:
+        status === 'completed' && Math.random() > 0.7
+          ? randomChoice(['处理顺利', '发现轻微污渍已处理', '需特别注意面料', '加急处理'])
+          : undefined,
+    };
+  });
+
+  const completedSteps = processSteps.filter(
+    (s) => s.status === 'completed' && s.durationMinutes
+  );
+  const totalDuration = completedSteps.reduce(
+    (sum, s) => sum + (s.durationMinutes || 0),
+    0
+  );
+
+  const currentStep = processSteps.find((s) => s.status === 'in_progress');
+  if (currentStep?.durationMinutes) {
+    totalDuration + currentStep.durationMinutes;
+  }
+
+  let slowestStep: BatchTrackInfo['slowestStep'] | undefined;
+  if (completedSteps.length > 0) {
+    const slowest = completedSteps.reduce((prev, curr) =>
+      (curr.durationMinutes || 0) > (prev.durationMinutes || 0) ? curr : prev
+    );
+    slowestStep = {
+      processType: slowest.processType,
+      processName: slowest.processName,
+      durationMinutes: slowest.durationMinutes || 0,
+    };
+  }
+
+  const prefix = batchCategoryPrefixes[category] || 'B';
+  const batchName = `${category} #${prefix}${batchId}`;
+
+  return {
+    batchId,
+    batchName,
+    category,
+    totalItems,
+    priority: Math.random() > 0.85 ? 'urgent' : 'normal',
+    currentProcess,
+    processSteps,
+    totalDurationMinutes: totalDuration || undefined,
+    expectedCompletionTime:
+      currentIndex < processOrder.length - 1
+        ? new Date(now + randomInt(30, 180) * 60 * 1000).toISOString()
+        : undefined,
+    slowestStep,
+  };
+}
+
+export function generateBatches(count: number = 30): BatchTrackInfo[] {
+  const batches: BatchTrackInfo[] = [];
+  const processOrder: ProcessType[] = [
+    'receiving',
+    'pretreatment',
+    'washing',
+    'finishing',
+    'inspection',
+    'completed',
+  ];
+
+  for (let i = 0; i < count; i++) {
+    const category = randomChoice(batchTypes);
+    const currentProcess = randomChoice(processOrder);
+    const batchNum = String(2024001 + i).padStart(7, '0');
+    batches.push(generateBatchTrackInfo(batchNum, category, currentProcess));
+  }
+
+  return batches;
+}
+
 export function generateDashboardData(): DashboardData {
   const equipments = generateEquipments();
   return {
@@ -344,6 +514,7 @@ export function generateDashboardData(): DashboardData {
     alarms: generateAlarms(equipments),
     production: generateProductionData(),
     maintenanceRecords: generateMaintenanceRecords(equipments),
+    batches: generateBatches(30),
     lastUpdate: new Date().toISOString(),
   };
 }
@@ -472,6 +643,25 @@ export function updateDashboardData(prev: DashboardData): DashboardData {
 
   const newCompleted = prev.production.completedCount + (Math.random() > 0.7 ? randomInt(1, 5) : 0);
 
+  const newBatches = prev.batches.map((batch) => {
+    if (Math.random() > 0.9) {
+      const processOrder: ProcessType[] = [
+        'receiving',
+        'pretreatment',
+        'washing',
+        'finishing',
+        'inspection',
+        'completed',
+      ];
+      const currentIdx = processOrder.indexOf(batch.currentProcess);
+      if (currentIdx < processOrder.length - 1) {
+        const nextProcess = processOrder[currentIdx + 1];
+        return generateBatchTrackInfo(batch.batchId, batch.category, nextProcess);
+      }
+    }
+    return batch;
+  });
+
   return {
     processes: newProcesses,
     workstations: newWorkstations,
@@ -482,6 +672,7 @@ export function updateDashboardData(prev: DashboardData): DashboardData {
       completedCount: newCompleted,
     },
     maintenanceRecords: prev.maintenanceRecords,
+    batches: newBatches,
     lastUpdate: new Date().toISOString(),
   };
 }

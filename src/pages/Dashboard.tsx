@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Spin, Alert } from 'antd';
-import { Users, Cpu, Layers, Wrench } from 'lucide-react';
+import { Users, Cpu, Layers, Wrench, Search } from 'lucide-react';
 import { useDashboardStore } from '@/store/dashboardStore';
 import { useInterval } from '@/hooks/useInterval';
 import { useAlarmSound } from '@/hooks/useAlarmSound';
@@ -13,6 +13,7 @@ import { AlarmModal } from '@/components/AlarmModal';
 import { ProductionStats } from '@/components/ProductionStats';
 import { EquipmentDetailModal } from '@/components/EquipmentDetailModal';
 import { MaintenanceForm } from '@/components/MaintenanceForm';
+import { BatchTrackModal } from '@/components/BatchTrackModal';
 
 const Dashboard: React.FC = () => {
   const {
@@ -27,6 +28,7 @@ const Dashboard: React.FC = () => {
     showEquipmentModal,
     showMaintenanceForm,
     maintenanceFormEquipment,
+    showBatchTrackModal,
     fetchData,
     updateData,
     acknowledgeAlarm,
@@ -39,6 +41,8 @@ const Dashboard: React.FC = () => {
     closeEquipmentModal,
     openMaintenanceForm,
     closeMaintenanceForm,
+    openBatchTrackModal,
+    closeBatchTrackModal,
     clearNewAlarmFlag,
   } = useDashboardStore();
 
@@ -147,18 +151,27 @@ const Dashboard: React.FC = () => {
         <div className="max-w-[1600px] mx-auto space-y-6">
           <section>
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Layers size={18} className="text-cyan-400" />
-                <h2 className="text-base font-semibold text-slate-200">工序处理量</h2>
+                <div className="flex items-center gap-2">
+                  <Layers size={18} className="text-cyan-400" />
+                  <h2 className="text-base font-semibold text-slate-200">工序处理量</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openBatchTrackModal()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-300 hover:bg-blue-600/30 hover:text-blue-200 transition-all text-xs font-medium"
+                  >
+                    <Search size={14} />
+                    批次追踪
+                  </button>
+                  <button
+                    onClick={() => openMaintenanceForm()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-300 hover:bg-purple-600/30 hover:text-purple-200 transition-all text-xs font-medium"
+                  >
+                    <Wrench size={14} />
+                    登记维保
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={() => openMaintenanceForm()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-300 hover:bg-purple-600/30 hover:text-purple-200 transition-all text-xs font-medium"
-              >
-                <Wrench size={14} />
-                登记维保
-              </button>
-            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               {data.processes.map((process, index) => (
                 <ProcessCard key={process.id} data={process} index={index} />
@@ -254,6 +267,11 @@ const Dashboard: React.FC = () => {
         open={showMaintenanceForm}
         defaultEquipmentId={maintenanceFormPreselectId || maintenanceFormEquipment?.id}
         onClose={handleMaintenanceFormClose}
+      />
+
+      <BatchTrackModal
+        open={showBatchTrackModal}
+        onClose={closeBatchTrackModal}
       />
 
       {isRefreshing && (

@@ -1,5 +1,36 @@
 export type ProcessType = 'receiving' | 'pretreatment' | 'washing' | 'finishing' | 'inspection' | 'completed';
 
+export interface ProcessStepRecord {
+  processType: ProcessType;
+  processName: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  operator?: string;
+  workstation?: string;
+  equipment?: string;
+  startTime?: string;
+  endTime?: string;
+  durationMinutes?: number;
+  itemCount?: number;
+  notes?: string;
+}
+
+export interface BatchTrackInfo {
+  batchId: string;
+  batchName: string;
+  category: string;
+  totalItems: number;
+  priority: 'normal' | 'urgent';
+  currentProcess: ProcessType;
+  processSteps: ProcessStepRecord[];
+  totalDurationMinutes?: number;
+  expectedCompletionTime?: string;
+  slowestStep?: {
+    processType: ProcessType;
+    processName: string;
+    durationMinutes: number;
+  };
+}
+
 export interface ProcessData {
   id: ProcessType;
   name: string;
@@ -99,5 +130,6 @@ export interface DashboardData {
   alarms: Alarm[];
   production: ProductionData;
   maintenanceRecords: MaintenanceRecord[];
+  batches: BatchTrackInfo[];
   lastUpdate: string;
 }

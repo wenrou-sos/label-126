@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DashboardData, Alarm, Equipment, MaintenanceRecord, MaintenanceType } from '@/types';
+import type { DashboardData, Alarm, Equipment, MaintenanceRecord, MaintenanceType, BatchTrackInfo } from '@/types';
 import { generateDashboardData, updateDashboardData, getMaintenanceCycle } from '@/utils/mockData';
 
 interface NewMaintenanceForm {
@@ -27,6 +27,8 @@ interface DashboardState {
   maintenanceFormEquipment: Equipment | null;
   localMaintenanceRecords: MaintenanceRecord[];
   localEquipmentUpdates: Record<string, { lastMaintenanceDate: string; lastMaintenanceHours: number }>;
+  showBatchTrackModal: boolean;
+  selectedBatch: BatchTrackInfo | null;
   fetchData: () => Promise<void>;
   updateData: () => void;
   acknowledgeAlarm: (id: string) => void;
@@ -41,6 +43,9 @@ interface DashboardState {
   openMaintenanceForm: (equipmentId?: string) => void;
   closeMaintenanceForm: () => void;
   addMaintenanceRecord: (form: NewMaintenanceForm) => void;
+  openBatchTrackModal: (batchId?: string) => void;
+  closeBatchTrackModal: () => void;
+  selectBatch: (batchId: string) => void;
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
@@ -58,6 +63,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   maintenanceFormEquipment: null,
   localMaintenanceRecords: [],
   localEquipmentUpdates: {},
+  showBatchTrackModal: false,
+  selectedBatch: null,
 
   fetchData: async () => {
     try {
@@ -120,7 +127,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   updateData: () => {
-    const { data, selectedEquipment } = get();
+    const { data, selectedEquipment, selectedBatch, localEquipmentUpdates, localMaintenanceRecords } = get();
     if (!data) return;
 
     const prevAlarmIds = new Set(data.alarms.filter((a) => !a.acknowledged).map((a) => a.id));
@@ -132,11 +139,65 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       set({ lastNewAlarmId: newAlarms[0].id });
     }
 
+    const mergedEquipments = newData.equipments.map((eq) => {
+      const localUpdate = localEquipmentUpdates[eq.id];
+      if (localUpdate) {
+        return {
+          ...eq,
+          lastMaintenanceDate: localUpdate.lastMaintenanceDate,
+          lastMaintenanceHours: localUpdate.lastMaintenanceHours,
+        };
+      }
+      return eq;
+    });
+
+    const updatedEquipmentNames = Object.keys(localEquipmentUpdates)
+      .map((eqId) => {
+        const eq = newData.equipments.find((e) => e.id === eqId);
+        return eq?.name;
+      })
+      .filter(Boolean) as string[];
+
+    const mergedAlarms = newData.alarms.map((alarm) => {
+      if (alarm.type === 'maintenance') {
+        const nameMatch = updatedEquipmentNames.some((name) =>
+          alarm.location.includes(name) || alarm.message.includes(name)
+        );
+        if (nameMatch) {
+          return { ...alarm, acknowledged: true };
+        }
+      }
+      return alarm;
+    });
+
+    const mergedRecords = [
+      ...localMaintenanceRecords,
+      ...newData.maintenanceRecords.filter(
+        (r) => !localMaintenanceRecords.some((lr) => lr.id === r.id)
+      ),
+    ].sort(
+      (a, b) => new Date(b.maintenanceDate).getTime() - new Date(a.maintenanceDate).getTime()
+    );
+
     const updatedSelectedEquipment = selectedEquipment
-      ? newData.equipments.find((e) => e.id === selectedEquipment.id) || null
+      ? mergedEquipments.find((e) => e.id === selectedEquipment.id) || null
       : null;
 
-    set({ data: newData, selectedEquipment: updatedSelectedEquipment });
+    const updatedSelectedBatch = selectedBatch
+      ? newData.batches.find((b) => b.batchId === selectedBatch.batchId) || null
+      : null;
+
+    set({
+      data: {
+        ...newData,
+        equipments: mergedEquipments,
+        alarms: mergedAlarms,
+        maintenanceRecords: mergedRecords,
+        batches: newData.batches,
+      },
+      selectedEquipment: updatedSelectedEquipment,
+      selectedBatch: updatedSelectedBatch,
+    });
   },
 
   acknowledgeAlarm: (id: string) => {
@@ -277,5 +338,31 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       showMaintenanceForm: false,
       maintenanceFormEquipment: null,
     });
+  },
+
+  openBatchTrackModal: (batchId?: string) => {
+    const { data } = get();
+    if (!data) return;
+    if (batchId) {
+      const batch = data.batches.find((b) => b.batchId === batchId || b.batchName.includes(batchId));
+      if (batch) {
+        set({ selectedBatch: batch, showBatchTrackModal: true });
+        return;
+      }
+    }
+    set({ showBatchTrackModal: true });
+  },
+
+  closeBatchTrackModal: () => {
+    set({ showBatchTrackModal: false, selectedBatch: null });
+  },
+
+  selectBatch: (batchId: string) => {
+    const { data } = get();
+    if (!data) return;
+    const batch = data.batches.find((b) => b.batchId === batchId);
+    if (batch) {
+      set({ selectedBatch: batch });
+    }
   },
 }));
